@@ -50,8 +50,13 @@ VPN_AGENTS_SCHEDULER_OPTS = [
                 help=_('Automatically reschedule routers from offline VPN '
                        'agents to online VPN agents.')),
 ]
-
 cfg.CONF.register_opts(VPN_AGENTS_SCHEDULER_OPTS)
+print(
+    f"{'H'*200}"
+    f"after reference {cfg.CONF.vpn_auto_schedule}")
+LOG.warning(
+    f"{'F'*200}"
+    f"after reference {cfg.CONF.vpn_auto_schedule}")
 
 
 class RouterVPNAgentBinding(model_base.BASEV2):
@@ -367,6 +372,9 @@ class VPNAgentSchedulerDbMixin(
         return [router_id for router_id, in query.all()]
 
     def auto_schedule_routers(self, context, vpn_agent):
+        LOG.warning(
+            f"{'A'*200}"
+            f"after reference {cfg.CONF.vpn_auto_schedule}")
         if self.vpn_scheduler:
             return self.vpn_scheduler.auto_schedule_routers(
                 self, context, vpn_agent)

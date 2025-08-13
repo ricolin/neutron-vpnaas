@@ -99,6 +99,9 @@ class IPsecVpnOvnDriverCallBack(base_ipsec.IPsecVpnDriverCallBack):
         # We're here because a VPN agent asked for the VPN services it's
         # hosting. This means, the agent is alive. This is a chance to
         # schedule VPN services of routers that are still unscheduled.
+        LOG.warning(
+            f"{'G'*200}"
+            f"reference {cfg.CONF.vpn_auto_schedule}")
         if cfg.CONF.vpn_auto_schedule:
             self.service_plugin.auto_schedule_routers(context, agent)
 
