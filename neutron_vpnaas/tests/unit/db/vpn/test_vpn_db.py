@@ -26,7 +26,7 @@ from neutron.db import l3_agentschedulers_db
 from neutron.db import servicetype_db as sdb
 from neutron import extensions as nextensions
 from neutron.scheduler import l3_agent_scheduler
-from neutron.tests.unit.db import test_db_base_plugin_v2 as test_db_plugin
+from neutron.tests.common import test_db_base_plugin_v2 as test_db_plugin
 from neutron.tests.unit.extensions import test_l3 as test_l3_plugin
 from neutron_lib.api.definitions import vpn
 from neutron_lib.callbacks import events
@@ -65,16 +65,16 @@ class TestVpnCorePlugin(test_l3_plugin.TestL3NatIntPlugin,
                         l3_agentschedulers_db.L3AgentSchedulerDbMixin,
                         agentschedulers_db.DhcpAgentSchedulerDbMixin):
     def __init__(self, configfile=None):
-        super(TestVpnCorePlugin, self).__init__()
+        super().__init__()
         self.router_scheduler = l3_agent_scheduler.ChanceScheduler()
 
 
-class VPNTestMixin(object):
-    resource_prefix_map = dict(
-        (k.replace('_', '-'),
-         "/vpn")
+class VPNTestMixin:
+    resource_prefix_map = {
+        k.replace('_', '-'):
+        "/vpn"
         for k in vpn.RESOURCE_ATTRIBUTE_MAP
-    )
+    }
 
     def _create_ikepolicy(self, fmt,
                           name='ikepolicy1',
@@ -412,14 +412,14 @@ class VPNTestMixin(object):
     def _check_ipsec_site_connection(self, ipsec_site_connection, keys, dpd):
         self.assertEqual(
             keys,
-            dict((k, v) for k, v
-                 in ipsec_site_connection.items()
-                 if k in keys))
+            {k: v for k, v
+             in ipsec_site_connection.items()
+             if k in keys})
         self.assertEqual(
             dpd,
-            dict((k, v) for k, v
-                 in ipsec_site_connection['dpd'].items()
-                 if k in dpd))
+            {k: v for k, v
+             in ipsec_site_connection['dpd'].items()
+             if k in dpd})
 
     def _set_active(self, model, resource_id):
         service_plugin = directory.get_plugin(nconstants.VPN)
@@ -463,10 +463,7 @@ class VPNPluginDbTestCase(VPNTestMixin,
         plugin_str = ('neutron_vpnaas.tests.unit.db.vpn.'
                       'test_vpn_db.TestVpnCorePlugin')
 
-        super(VPNPluginDbTestCase, self).setUp(
-            plugin_str,
-            service_plugins=service_plugins
-        )
+        super().setUp(plugin_str, service_plugins=service_plugins)
         self._subnet_id = _uuid()
         self.core_plugin = TestVpnCorePlugin()
         self.plugin = vpn_plugin.VPNPlugin()
@@ -488,7 +485,7 @@ class TestVpnaas(VPNPluginDbTestCase):
         # NOTE(armax): make sure that the callbacks needed by this test are
         # registered, as they may get wiped out depending by the order in
         # which imports, subscriptions and mocks occur.
-        super(TestVpnaas, self).setUp(**kwargs)
+        super().setUp(**kwargs)
         vpn_db.subscribe()
 
     def _check_policy(self, policy, keys, lifetime):
@@ -514,6 +511,12 @@ class TestVpnaas(VPNPluginDbTestCase):
             'value': 3600}
         with self.ikepolicy(name=name, description=description) as ikepolicy:
             self._check_policy(ikepolicy['ikepolicy'], keys, lifetime)
+
+    def test_create_ikepolicy_with_every_pfs(self):
+        """Test case to create ikepolicies with different pfs."""
+        name = "ikepolicy1"
+        for group in vpn_models.PFS_ENUM_VALUES:
+            self.ikepolicy(name=name, pfs=group, expected_res_status=201)
 
     def test_create_ikepolicy_with_aggressive_mode(self):
         """Test case to create an ikepolicy with aggressive mode."""
@@ -748,6 +751,12 @@ class TestVpnaas(VPNPluginDbTestCase):
                               description=description) as ipsecpolicy:
             self._check_policy(ipsecpolicy['ipsecpolicy'], keys, lifetime)
 
+    def test_create_ipsecpolicies_with_every_pfs(self):
+        """Test case to create ipsecpolicies with different pfs."""
+        name = "ipsecpolicy1"
+        for group in vpn_models.PFS_ENUM_VALUES:
+            self.ipsecpolicy(name=name, pfs=group, expected_res_status=201)
+
     def test_delete_ipsecpolicy(self):
         """Test case to delete an ipsecpolicy."""
         with self.ipsecpolicy(do_delete=False) as ipsecpolicy:
@@ -944,9 +953,9 @@ class TestVpnaas(VPNPluginDbTestCase):
                                      router=router,
                                      description=description,
                                      **extras) as vpnservice:
-                    self.assertEqual(dict((k, v) for k, v in
-                                          vpnservice['vpnservice'].items()
-                                          if k in expected),
+                    self.assertEqual({k: v for k, v in
+                                      vpnservice['vpnservice'].items()
+                                      if k in expected},
                                      expected)
 
     def test_delete_router_interface_in_use_by_vpnservice(self):
@@ -1368,8 +1377,8 @@ class TestVpnaas(VPNPluginDbTestCase):
                 ext_gw = router['router']['external_gateway_info']
                 if ext_gw:
                     self._create_subnet(self.fmt,
-                        net_id=ext_gw['network_id'],
-                        ip_version=6, cidr='2001:db8::/32')
+                                        net_id=ext_gw['network_id'],
+                                        ip_version=6, cidr='2001:db8::/32')
                 keys['vpnservice_id'] = vpnservice1['vpnservice']['id']
                 keys['ikepolicy_id'] = ikepolicy['ikepolicy']['id']
                 keys['ipsecpolicy_id'] = ipsecpolicy['ipsecpolicy']['id']
@@ -1718,7 +1727,7 @@ class TestVpnaas(VPNPluginDbTestCase):
 # tests.
 
 # TODO(pcm): Put helpers in another module for sharing
-class NeutronResourcesMixin(object):
+class NeutronResourcesMixin:
 
     def create_network(self, overrides=None):
         """Create database entry for network."""
@@ -1815,7 +1824,7 @@ class TestVpnDatabase(base.NeutronDbPluginV2TestCase, NeutronResourcesMixin):
         # Setup the core plugin
         self.plugin_str = ('neutron_vpnaas.tests.unit.db.vpn.'
                            'test_vpn_db.TestVpnCorePlugin')
-        super(TestVpnDatabase, self).setUp(self.plugin_str)
+        super().setUp(self.plugin_str)
         # Get the plugins
         self.core_plugin = directory.get_plugin()
         self.l3_plugin = directory.get_plugin(nconstants.L3)
@@ -2025,7 +2034,8 @@ class TestVpnDatabase(base.NeutronDbPluginV2TestCase, NeutronResourcesMixin):
         expected1.update({'id': group_id1})
         expected2.update({'id': group_id2})
         expected_groups = [expected1, expected2]
-        actual_groups = self.plugin.get_endpoint_groups(self.context,
+        actual_groups = self.plugin.get_endpoint_groups(
+            self.context,
             fields=('type', 'tenant_id', 'endpoints',
                     'name', 'description', 'id'))
         for expected_group, actual_group in zip(expected_groups,
@@ -2312,9 +2322,9 @@ class TestVpnDatabase(base.NeutronDbPluginV2TestCase, NeutronResourcesMixin):
                 group_type='cidr', endpoints=peer_cidrs)
             ipsec_site_connection['ipsec_site_connection'].update(
                 {'local_ep_group_id': local_ep_group['id'],
-                'peer_ep_group_id': peer_ep_group['id']})
+                 'peer_ep_group_id': peer_ep_group['id']})
             self.plugin.create_ipsec_site_connection(self.context,
-                                                    ipsec_site_connection)
+                                                     ipsec_site_connection)
         return private_subnet, router
 
     def _setup_ipsec_site_connections_without_ep_groups(self, peer_cidr_lists):

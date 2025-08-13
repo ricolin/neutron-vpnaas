@@ -15,15 +15,16 @@
 from unittest import mock
 
 from neutron.api import extensions
+from neutron.api import wsgi
 from neutron.common.ovn import constants as ovn_constants
 from neutron import policy
 from neutron.tests.common import helpers
+from neutron.tests.common import test_db_base_plugin_v2 as test_plugin
 from neutron.tests.unit.api import test_extensions
-from neutron.tests.unit.db import test_db_base_plugin_v2 as test_plugin
 from neutron.tests.unit.extensions import test_l3
 from neutron.tests.unit import testlib_api
-from neutron import wsgi
 from neutron_lib import context
+from neutron_lib.db import api as db_api
 from neutron_lib import exceptions as n_exc
 from neutron_lib.plugins import constants as plugin_constants
 from neutron_lib.plugins import directory
@@ -44,7 +45,7 @@ VPN_HOSTA = "host-1"
 VPN_HOSTB = "host-2"
 
 
-class VPNAgentSchedulerTestMixIn(object):
+class VPNAgentSchedulerTestMixIn:
     def _request_list(self, path, admin_context=True,
                       expected_code=exc.HTTPOk.code):
         req = self._path_req(path, admin_context=admin_context)
@@ -85,18 +86,18 @@ class VPNAgentSchedulerTestMixIn(object):
     def _list_routers_hosted_by_vpn_agent(self, agent_id,
                                           expected_code=exc.HTTPOk.code,
                                           admin_context=True):
-        path = "/agents/%s/%s.%s" % (agent_id,
-                                     vpn_agentschedulers.VPN_ROUTERS,
-                                     self.fmt)
+        path = "/agents/{}/{}.{}".format(agent_id,
+                                         vpn_agentschedulers.VPN_ROUTERS,
+                                         self.fmt)
         return self._request_list(path, expected_code=expected_code,
                                   admin_context=admin_context)
 
     def _add_router_to_vpn_agent(self, id, router_id,
                                  expected_code=exc.HTTPCreated.code,
                                  admin_context=True):
-        path = "/agents/%s/%s.%s" % (id,
-                                     vpn_agentschedulers.VPN_ROUTERS,
-                                     self.fmt)
+        path = "/agents/{}/{}.{}".format(id,
+                                         vpn_agentschedulers.VPN_ROUTERS,
+                                         self.fmt)
         req = self._path_create_request(path,
                                         {'router_id': router_id},
                                         admin_context=admin_context)
@@ -106,19 +107,19 @@ class VPNAgentSchedulerTestMixIn(object):
     def _list_vpn_agents_hosting_router(self, router_id,
                                         expected_code=exc.HTTPOk.code,
                                         admin_context=True):
-        path = "/routers/%s/%s.%s" % (router_id,
-                                      vpn_agentschedulers.VPN_AGENTS,
-                                      self.fmt)
+        path = "/routers/{}/{}.{}".format(router_id,
+                                          vpn_agentschedulers.VPN_AGENTS,
+                                          self.fmt)
         return self._request_list(path, expected_code=expected_code,
                                   admin_context=admin_context)
 
     def _remove_router_from_vpn_agent(self, id, router_id,
                                       expected_code=exc.HTTPNoContent.code,
                                       admin_context=True):
-        path = "/agents/%s/%s/%s.%s" % (id,
-                                        vpn_agentschedulers.VPN_ROUTERS,
-                                        router_id,
-                                        self.fmt)
+        path = "/agents/{}/{}/{}.{}".format(id,
+                                            vpn_agentschedulers.VPN_ROUTERS,
+                                            router_id,
+                                            self.fmt)
         req = self._path_delete_request(path, admin_context=admin_context)
         res = req.get_response(self.ext_api)
         self.assertEqual(expected_code, res.status_int)
@@ -329,6 +330,46 @@ class VPNAgentSchedulerTestCase(VPNAgentSchedulerTestCaseBase):
 
         self.assertEqual(VPN_HOSTA, host_before)
         self.assertEqual(VPN_HOSTB, host_after)
+
+    def test_router_reschedule_with_write_db_wrap(self):
+        self._register_agent_states()
+        agent_a = self.service_plugin.get_vpn_agent_on_host(
+            self.adminContext, VPN_HOSTA)
+
+        with self.vpnservice() as service:
+            # schedule the vpn routers to agent A
+            with db_api.CONTEXT_WRITER.using(self.adminContext):
+                self.service_plugin.auto_schedule_routers(
+                    self.adminContext, agent_a)
+            ctxt_mock = mock.MagicMock()
+            call_mock = mock.MagicMock(
+                side_effect=[oslo_messaging.MessagingTimeout, None])
+            ctxt_mock.call = call_mock
+            self.client_mock.prepare = mock.MagicMock(return_value=ctxt_mock)
+            self._take_down_agent_and_run_reschedule(VPN_HOSTA)
+            self.assertEqual(2, call_mock.call_count)
+            # make sure vpn service was rescheduled even when first attempt
+            # failed to notify VPN agent
+            router_id = service['vpnservice']['router_id']
+            host = self._get_agent_host_by_router(router_id)
+
+            vpn_agents = self._list_vpn_agents_hosting_router(router_id)
+            self.assertEqual(1, len(vpn_agents['agents']))
+            self.assertEqual(VPN_HOSTB, host)
+
+    def test_router_reschedule_with_read_db_wrap(self):
+        self._register_agent_states()
+        agent_a = self.service_plugin.get_vpn_agent_on_host(
+            self.adminContext, VPN_HOSTA)
+
+        with self.vpnservice():
+            # schedule the vpn routers to agent A
+            with db_api.CONTEXT_READER.using(self.adminContext):
+                self.assertRaises(
+                    TypeError,
+                    self.service_plugin.auto_schedule_routers,
+                    self.adminContext,
+                    agent_a)
 
     def test_router_reschedule_succeeded_after_failed_notification(self):
         self._register_agent_states()

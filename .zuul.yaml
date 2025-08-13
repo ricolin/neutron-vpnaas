@@ -8,13 +8,7 @@
       - release-notes-jobs-python3
     check:
       jobs:
-        - openstack-tox-py39:
-            required-projects:
-              - openstack/neutron
         - openstack-tox-py310:
-            required-projects:
-              - openstack/neutron
-        - openstack-tox-py311:
             required-projects:
               - openstack/neutron
         - openstack-tox-py312:
@@ -28,13 +22,10 @@
         - neutron-tempest-plugin-vpnaas-ovn
     gate:
       jobs:
-        - openstack-tox-py39:
-            required-projects:
-              - openstack/neutron
         - openstack-tox-py310:
             required-projects:
               - openstack/neutron
-        - openstack-tox-py311:
+        - openstack-tox-py312:
             required-projects:
               - openstack/neutron
         - openstack-tox-docs:
@@ -46,22 +37,17 @@
     experimental:
       jobs:
         - neutron-vpnaas-rally
-        - openstack-tox-py310-with-oslo-master:
+        - openstack-tox-py312-with-oslo-master:
             required-projects:
               - openstack/neutron
-        - neutron-vpnaas-openstack-tox-py310-with-sqlalchemy-main
     periodic-weekly:
       jobs:
         - openstack-tox-py312:
             required-projects:
               - openstack/neutron
-        - openstack-tox-py311:
+        - openstack-tox-py312-with-oslo-master:
             required-projects:
               - openstack/neutron
-        - openstack-tox-py310-with-oslo-master:
-            required-projects:
-              - openstack/neutron
-        - neutron-vpnaas-openstack-tox-py310-with-sqlalchemy-main
         - neutron-tempest-plugin-vpnaas
         - neutron-tempest-plugin-vpnaas-ovn
         - neutron-vpnaas-functional-sswan
@@ -93,15 +79,3 @@
       - ^doc/.*$
       - ^neutron_vpnaas/tests/unit/.*$
       - ^releasenotes/.*$
-
-- job:
-    name: neutron-vpnaas-openstack-tox-py310-with-sqlalchemy-main
-    required-projects:
-      - name: github.com/sqlalchemy/sqlalchemy
-        override-checkout: main
-      - name: github.com/sqlalchemy/alembic
-        override-checkout: main
-      - openstack/oslo.db
-      - openstack/neutron
-      - openstack/neutron-lib
-    parent: openstack-tox-py310-with-oslo-master

@@ -55,7 +55,7 @@ function neutron_vpnaas_configure_agent {
 }
 
 function neutron_vpnaas_configure_ovn_agent {
-    cp $NEUTRON_VPNAAS_DIR/etc/neutron_ovn_vpn_agent.ini.sample $OVN_VPNAGENT_CONF
+    cp $NEUTRON_VPNAAS_DIR/etc/ovn_vpn_agent.ini.sample $OVN_VPNAGENT_CONF
 
     iniset $OVN_VPNAGENT_CONF DEFAULT interface_driver openvswitch
     iniset $OVN_VPNAGENT_CONF DEFAULT state_path $DATA_DIR/neutron
@@ -104,7 +104,7 @@ function neutron_vpnaas_start_vpnagent {
     NEUTRON_OVN_BIN_DIR=$(get_python_exec_prefix)
     NEUTRON_OVN_VPNAGENT_BINARY="neutron-ovn-vpn-agent"
 
-    run_process q-ovn-vpn-agent "$NEUTRON_OVN_BIN_DIR/$NEUTRON_OVN_VPNAGENT_BINARY --config-file $OVN_VPNAGENT_CONF"
+    run_process q-ovn-vpn-agent "$NEUTRON_OVN_BIN_DIR/$NEUTRON_OVN_VPNAGENT_BINARY --config-file $NEUTRON_CONF --config-file $OVN_VPNAGENT_CONF"
     # Format logging
     setup_logging $OVN_VPNAGENT_CONF
 }

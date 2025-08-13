@@ -109,7 +109,7 @@ class TestStrongSwanDeviceDriver(base.BaseSudoTestCase):
     """Test the StrongSwan reference implementation of the device driver."""
 
     def setUp(self):
-        super(TestStrongSwanDeviceDriver, self).setUp()
+        super().setUp()
         self.conf = cfg.CONF
         self.conf.register_opts(l3_config.OPTS)
         self.conf.register_opts(ipsec.ipsec_opts, 'ipsec')
@@ -170,7 +170,7 @@ class TestStrongSwanDeviceDriver(base.BaseSudoTestCase):
 class TestStrongSwanScenario(test_scenario.TestIPSecBase):
 
     def setUp(self):
-        super(TestStrongSwanScenario, self).setUp()
+        super().setUp()
         self.conf.register_opts(strongswan_ipsec.strongswan_opts,
                                 'strongswan')
         VPNAAS_STRONGSWAN_DEVICE = ('neutron_vpnaas.services.vpn.'
@@ -181,6 +181,7 @@ class TestStrongSwanScenario(test_scenario.TestIPSecBase):
                               'vpnagent')
         self.agent = neutron_l3_agent.L3NATAgentWithStateReport('agent1',
                                                                 self.conf)
+        self.agent.init_host()
         self.vpn_agent = vpn_agent.L3WithVPNaaS(self.conf)
         vpn_service = mock.Mock()
         vpn_service.conf = self.conf
@@ -208,9 +209,9 @@ class TestStrongSwanScenario(test_scenario.TestIPSecBase):
 
     def test_strongswan_connection_with_non_default_value(self):
         site1 = self.create_site(test_scenario.PUBLIC_NET[4],
-                [self.private_nets[1]])
+                                 [self.private_nets[1]])
         site2 = self.create_site(test_scenario.PUBLIC_NET[5],
-                [self.private_nets[2]])
+                                 [self.private_nets[2]])
 
         self.check_ping(site1, site2, success=False)
         self.check_ping(site2, site1, success=False)
@@ -229,9 +230,9 @@ class TestStrongSwanScenario(test_scenario.TestIPSecBase):
 
     def _test_strongswan_connection_with_auth_algo(self, auth_algo):
         site1 = self.create_site(test_scenario.PUBLIC_NET[4],
-                [self.private_nets[1]])
+                                 [self.private_nets[1]])
         site2 = self.create_site(test_scenario.PUBLIC_NET[5],
-                [self.private_nets[2]])
+                                 [self.private_nets[2]])
 
         self.check_ping(site1, site2, success=False)
         self.check_ping(site2, site1, success=False)
@@ -272,9 +273,9 @@ class TestStrongSwanScenario(test_scenario.TestIPSecBase):
 
     def test_strongswan_connection_with_non_ascii_psk(self):
         site1 = self.create_site(test_scenario.PUBLIC_NET[4],
-                [self.private_nets[1]])
+                                 [self.private_nets[1]])
         site2 = self.create_site(test_scenario.PUBLIC_NET[5],
-                [self.private_nets[2]])
+                                 [self.private_nets[2]])
 
         self.check_ping(site1, site2, success=False)
         self.check_ping(site2, site1, success=False)
@@ -289,9 +290,9 @@ class TestStrongSwanScenario(test_scenario.TestIPSecBase):
 
     def test_strongswan_connection_with_wrong_non_ascii_psk(self):
         site1 = self.create_site(test_scenario.PUBLIC_NET[4],
-                [self.private_nets[1]])
+                                 [self.private_nets[1]])
         site2 = self.create_site(test_scenario.PUBLIC_NET[5],
-                [self.private_nets[2]])
+                                 [self.private_nets[2]])
 
         self.check_ping(site1, site2, success=False)
         self.check_ping(site2, site1, success=False)

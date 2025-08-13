@@ -21,10 +21,12 @@ import re
 import shutil
 import socket
 import sys
+import typing as ty
 
 import eventlet
 import jinja2
 import netaddr
+from neutron.agent.l3.router_info import RouterInfo
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import utils as agent_utils
 from neutron_lib.api import validators
@@ -134,7 +136,7 @@ def _get_template(template_file):
     return JINJA_ENV.get_template(template_file)
 
 
-class BaseSwanProcess(object, metaclass=abc.ABCMeta):
+class BaseSwanProcess(metaclass=abc.ABCMeta):
     """Swan Family Process Manager
 
     This class manages start/restart/stop ipsec process.
@@ -161,8 +163,12 @@ class BaseSwanProcess(object, metaclass=abc.ABCMeta):
     DIALECT_MAP = {
         "3des": "3des",
         "aes-128": "aes128",
-        "aes-256": "aes256",
         "aes-192": "aes192",
+        "aes-256": "aes256",
+        "aes-ctr-128": "aesctr128",
+        "aes-ctr-192": "aesctr192",
+        "aes-ctr-256": "aesctr256",
+        "aes-xcbc": "aes_xcbc",
         "sha256": "sha2_256",
         "sha384": "sha2_384",
         "sha512": "sha2_512",
@@ -170,6 +176,16 @@ class BaseSwanProcess(object, metaclass=abc.ABCMeta):
         "group5": "modp1536",
         "group14": "modp2048",
         "group15": "modp3072",
+        "group16": "modp4096",
+        "group17": "modp6144",
+        "group18": "modp8192",
+        "group19": "ecp256",
+        "group20": "ecp384",
+        "group21": "ecp521",
+        "group22": "dh22",
+        "group23": "dh23",
+        "group24": "dh24",
+        "group31": "curve25519",
         "bi-directional": "start",
         "response-only": "add",
         "v2": "insist",
@@ -185,9 +201,9 @@ class BaseSwanProcess(object, metaclass=abc.ABCMeta):
     STATUS_RE = r'\d\d\d "([a-f0-9\-]+).* (unrouted|erouted);'
     STATUS_NOT_RUNNING_RE = 'Command:.*ipsec.*status.*Exit code: [1|3]$'
     STATUS_IPSEC_SA_ESTABLISHED_RE = (
-        r'\d{3} #\d+: "([a-f0-9\-]+).*established.*newest IPSEC')
+        r'\d{3} #\d+: "([a-f0-9\-]+).*established.*newest')
     STATUS_IPSEC_SA_ESTABLISHED_RE2 = (
-        r'\d{3} #\d+: "([a-f0-9\-\/x]+).*established.*newest IPSEC')
+        r'\d{3} #\d+: "([a-f0-9\-\/x]+).*established.*newest')
 
     def __init__(self, conf, process_id, vpnservice, namespace):
         self.conf = conf
@@ -445,9 +461,12 @@ class OpenSwanProcess(BaseSwanProcess):
     (2) ipsec addconn: Adds new ipsec addconn
     (3) ipsec whack:  control interface for IPSEC keying daemon
     """
+    # Derived classes can set IPSEC_CONF_NAT_TRAVERSAL to None to
+    # omit the nat_traversal line in ipsec.conf
+    IPSEC_CONF_NAT_TRAVERSAL = "yes"
+
     def __init__(self, conf, process_id, vpnservice, namespace):
-        super(OpenSwanProcess, self).__init__(conf, process_id,
-                                              vpnservice, namespace)
+        super().__init__(conf, process_id, vpnservice, namespace)
         self.secrets_file = os.path.join(
             self.etc_dir, 'ipsec.secrets')
         self.config_file = os.path.join(
@@ -502,7 +521,7 @@ class OpenSwanProcess(BaseSwanProcess):
             # on throwing to tell us something. If the pid file exists,
             # delve into the process information and check if it matches
             # our expected command line.
-            with open(self.pid_file, 'r') as f:
+            with open(self.pid_file) as f:
                 pid = f.readline().strip()
                 with open('/proc/%s/cmdline' % pid) as cmd_line_file:
                     cmd_line = cmd_line_file.readline()
@@ -519,7 +538,7 @@ class OpenSwanProcess(BaseSwanProcess):
                                   {'pid': pid, 'cmd_line': cmd_line})
                         return True
 
-        except IOError as e:
+        except OSError as e:
             # This is logged as "info" instead of error because it simply
             # means that we couldn't find the files to check on them.
             LOG.info('Unable to find control files on startup for '
@@ -632,7 +651,7 @@ class OpenSwanProcess(BaseSwanProcess):
             nets += ipsec_site_conn['peer_cidrs']
         for net in nets:
             version = netaddr.IPNetwork(net).version
-            virtual_privates.append('%%v%s:%s' % (version, net))
+            virtual_privates.append('%v{}:{}'.format(version, net))
         virtual_privates.sort()
         return ','.join(virtual_privates)
 
@@ -641,7 +660,8 @@ class OpenSwanProcess(BaseSwanProcess):
         virtual_privates = self._virtual_privates(vpnservice)
         return template.render(
             {'vpnservice': vpnservice,
-             'virtual_privates': virtual_privates})
+             'virtual_privates': virtual_privates,
+             'nat_traversal': self.IPSEC_CONF_NAT_TRAVERSAL})
 
     def start_pluto(self):
         cmd = [self.binary,
@@ -781,7 +801,7 @@ class OpenSwanProcess(BaseSwanProcess):
         self.connection_status = {}
 
 
-class IPsecVpnDriverApi(object):
+class IPsecVpnDriverApi:
     """IPSecVpnDriver RPC api."""
 
     @log_helpers.log_method_call
@@ -831,10 +851,10 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
         self.conn = n_rpc.Connection()
         self.context = context.get_admin_context_without_session()
         self.topic = topics.IPSEC_AGENT_TOPIC
-        node_topic = '%s.%s' % (self.topic, self.host)
+        node_topic = '{}.{}'.format(self.topic, self.host)
 
         self.processes = {}
-        self.routers = {}
+        self.routers: ty.Dict[str, ty.Any] = {}
         self.process_status_cache = {}
 
         self.endpoints = [self]
@@ -854,16 +874,16 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
             Note: If the router is a DVR, then the SNAT namespace will be
                   provided. If the router does not exist, return None.
         """
-        router = self.routers.get(router_id)
-        if not router:
+        router_info = self.routers.get(router_id)
+        if not router_info:
             return
         # For DVR, use SNAT namespace
         # TODO(pcm): Use router object method to tell if DVR, when available
-        if router.router['distributed']:
-            return router.snat_namespace.name
-        return router.ns_name
+        if router_info.router['distributed']:
+            return router_info.snat_namespace.name
+        return router_info.ns_name
 
-    def get_router_based_iptables_manager(self, router):
+    def get_router_based_iptables_manager(self, ri):
         """Returns router based iptables manager
 
         In DVR routers the IPsec VPN service should run inside
@@ -877,61 +897,28 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
         return the legacy iptables_manager.
         """
         # TODO(pcm): Use router object method to tell if DVR, when available
-        if router.router['distributed']:
-            return router.snat_iptables_manager
-        return router.iptables_manager
+        if ri.router['distributed']:
+            return ri.snat_iptables_manager
+        return ri.iptables_manager
 
-    def add_nat_rule(self, router_id, chain, rule, top=False):
-        """Add nat rule in namespace.
+    def ensure_nat_rules(self, vpnservice):
+        """Ensure the required nat rules for ipsec exist in iptables.
 
-        :param router_id: router_id
-        :param chain: a string of chain name
-        :param rule: a string of rule
-        :param top: if top is true, the rule
-            will be placed on the top of chain
-            Note if there is no router, this method does nothing
-        """
-        router = self.routers.get(router_id)
-        if not router:
-            return
-        iptables_manager = self.get_router_based_iptables_manager(router)
-        iptables_manager.ipv4['nat'].add_rule(chain, rule, top=top)
-
-    def remove_nat_rule(self, router_id, chain, rule, top=False):
-        """Remove nat rule in namespace.
-
-        :param router_id: router_id
-        :param chain: a string of chain name
-        :param rule: a string of rule
-        :param top: unused
-            needed to have same argument with add_nat_rule
-        """
-        router = self.routers.get(router_id)
-        if not router:
-            return
-        iptables_manager = self.get_router_based_iptables_manager(router)
-        iptables_manager.ipv4['nat'].remove_rule(chain, rule, top=top)
-
-    def iptables_apply(self, router_id):
-        """Apply IPtables.
-
-        :param router_id: router_id
-        This method do nothing if there is no router
-        """
-        router = self.routers.get(router_id)
-        if not router:
-            return
-        iptables_manager = self.get_router_based_iptables_manager(router)
-        iptables_manager.apply()
-
-    def _update_nat(self, vpnservice, func):
-        """Setting up nat rule in iptables.
-
-        We need to setup nat rule for ipsec packet.
         :param vpnservice: vpnservices
-        :param func: self.add_nat_rule or self.remove_nat_rule
         """
-        router_id = vpnservice['router_id']
+        LOG.debug("ensure_nat_rules called for router %s",
+                  vpnservice['router_id'])
+        ri = self.routers.get(vpnservice['router_id'])
+        if not ri:
+            LOG.debug("No router info for router %s", vpnservice['router_id'])
+            return
+
+        iptables_manager = self.get_router_based_iptables_manager(ri)
+        # clear all existing rules first
+        LOG.debug("Clearing vpnaas tagged NAT rules for router %s",
+                  ri.router_id)
+        iptables_manager.ipv4['nat'].clear_rules_by_tag('vpnaas')
+
         for ipsec_site_connection in vpnservice['ipsec_site_connections']:
             for local_cidr in ipsec_site_connection['local_cidrs']:
                 # This ipsec rule is not needed for ipv6.
@@ -939,13 +926,33 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
                     continue
 
                 for peer_cidr in ipsec_site_connection['peer_cidrs']:
-                    func(router_id,
-                         'POSTROUTING',
-                         '-s %s -d %s -m policy '
-                         '--dir out --pol ipsec '
-                         '-j ACCEPT ' % (local_cidr, peer_cidr),
-                         top=True)
-        self.iptables_apply(router_id)
+                    LOG.debug("Adding an ipsec policy NAT rule"
+                              "%s <-> %s to router id %s",
+                              peer_cidr, local_cidr, vpnservice['router_id'])
+
+                    iptables_manager.ipv4['nat'].add_rule(
+                        'POSTROUTING',
+                        '-s %s -d %s -m policy '
+                        '--dir out --pol ipsec '
+                        '-j ACCEPT ' % (local_cidr, peer_cidr),
+                        top=True, tag='vpnaas')
+
+        LOG.debug("Applying iptables for router id %s",
+                  vpnservice['router_id'])
+        iptables_manager.apply()
+
+    @log_helpers.log_method_call
+    def remove_nat_rules(self, router_id):
+        """Remove all our iptables rules in namespace.
+
+        :param router_id: router_id
+        """
+        router = self.routers.get(router_id)
+        if not router:
+            return
+        iptables_manager = self.get_router_based_iptables_manager(router)
+        iptables_manager.ipv4['nat'].clear_rules_by_tag('vpnaas')
+        iptables_manager.apply()
 
     @log_helpers.log_method_call
     def vpnservice_updated(self, context, **kwargs):
@@ -980,28 +987,28 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
             process.update_vpnservice(vpnservice)
         return process
 
-    def create_router(self, router):
+    def create_router(self, router_info: RouterInfo):
         """Handling create router event.
 
         Agent calls this method, when the process namespace is ready.
         Note: process_id == router_id == vpnservice_id
         """
-        process_id = router.router_id
-        self.routers[process_id] = router
+        process_id = router_info.router_id
+        self.routers[process_id] = router_info
         if process_id in self.processes:
             # In case of vpnservice is created
             # before router's namespace
             process = self.processes[process_id]
-            self._update_nat(process.vpnservice, self.add_nat_rule)
+            self.ensure_nat_rules(process.vpnservice)
             # Don't run ipsec process for backup HA router
-            if router.router['ha'] and router.ha_state == 'backup':
+            if router_info.router['ha'] and router_info.ha_state == 'backup':
                 return
             process.enable()
 
     def destroy_process(self, process_id):
         """Destroy process.
 
-        Disable the process, remove the nat rule, and remove the process
+        Disable the process, remove the iptables rules, and remove the process
         manager for the processes that no longer are running vpn service.
         """
         if process_id in self.processes:
@@ -1009,7 +1016,7 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
             process.disable()
             vpnservice = process.vpnservice
             if vpnservice:
-                self._update_nat(vpnservice, self.remove_nat_rule)
+                self.remove_nat_rules(process_id)
             del self.processes[process_id]
 
     def destroy_router(self, process_id):
@@ -1104,11 +1111,11 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
 
     @log_helpers.log_method_call
     @lockutils.synchronized('vpn-agent', 'neutron-')
-    def sync(self, context, routers):
+    def sync(self, context, router_information: ty.List):
         """Sync status with server side.
 
         :param context: context object for RPC call
-        :param routers: Router objects which is created in this sync event
+        :param router_information: RouterInfo objects with updated state
 
         There could be many failure cases should be
         considered including the followings.
@@ -1123,7 +1130,22 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
         vpnservices = self.agent_rpc.get_vpn_services_on_host(
             context, self.host)
         router_ids = [vpnservice['router_id'] for vpnservice in vpnservices]
-        sync_router_ids = [router['id'] for router in routers]
+        sync_router_ids = []
+
+        for ri in router_information:
+            # Update our router_info with the updated one
+            if isinstance(ri, RouterInfo):
+                router_id = ri.router_id if ri.router_id else None
+            elif isinstance(ri, dict):
+                router_id = ri.get("router_id")
+            else:
+                router_id = None
+
+            if not router_id:
+                continue
+
+            self.routers[router_id] = ri
+            sync_router_ids.append(router_id)
 
         self._sync_vpn_processes(vpnservices, sync_router_ids)
         self._delete_vpn_processes(sync_router_ids, router_ids)
@@ -1140,13 +1162,13 @@ class IPsecDriver(device_drivers.DeviceDriver, metaclass=abc.ABCMeta):
                     vpnservice['router_id'] in sync_router_ids):
                 process = self.ensure_process(vpnservice['router_id'],
                                               vpnservice=vpnservice)
-                self._update_nat(vpnservice, self.add_nat_rule)
-                router = self.routers.get(vpnservice['router_id'])
-                if not router:
+                self.ensure_nat_rules(vpnservice)
+                ri = self.routers.get(vpnservice['router_id'])
+                if not ri:
                     continue
                 # For HA router, spawn vpn process on master router
                 # and terminate vpn process on backup router
-                if router.router['ha'] and router.ha_state == 'backup':
+                if ri.router['ha'] and ri.ha_state == 'backup':
                     process.disable()
                 else:
                     process.update()

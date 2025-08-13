@@ -76,14 +76,57 @@ class StrongSwanProcess(ipsec.BaseSwanProcess):
     STATUS_NOT_RUNNING_RE = 'Command:.*ipsec.*status.*Exit code: [1|3] '
 
     def __init__(self, conf, process_id, vpnservice, namespace):
-        self.DIALECT_MAP['v1'] = 'ikev1'
-        self.DIALECT_MAP['v2'] = 'ikev2'
-        self.DIALECT_MAP['sha256'] = 'sha256'
+        dialect_map_update = {
+            'v1': 'ikev1',
+            'v2': 'ikev2',
+            # ENCR_AES_CTR
+            'aes-128-ctr': 'aes128ctr',
+            'aes-192-ctr': 'aes192ctr',
+            'aes-256-ctr': 'aes256ctr',
+            # ENCR_AES_CCM_8
+            'aes-128-ccm-8': 'aes128ccm8',
+            'aes-192-ccm-8': 'aes192ccm8',
+            'aes-256-ccm-8': 'aes256ccm8',
+            # ENCR_AES_CCM_12
+            'aes-128-ccm-12': 'aes128ccm12',
+            'aes-192-ccm-12': 'aes192ccm12',
+            'aes-256-ccm-12': 'aes256ccm12',
+            # ENCR_AES_CCM_16
+            'aes-128-ccm-16': 'aes128ccm16',
+            'aes-192-ccm-16': 'aes192ccm16',
+            'aes-256-ccm-16': 'aes256ccm16',
+            # ENCR_AES_GCM_8
+            'aes-128-gcm-8': 'aes128gcm8',
+            'aes-192-gcm-8': 'aes192gcm8',
+            'aes-256-gcm-8': 'aes256gcm8',
+            # ENCR_AES_GCM_12
+            'aes-128-gcm-12': 'aes128gcm12',
+            'aes-192-gcm-12': 'aes192gcm12',
+            'aes-256-gcm-12': 'aes256gcm12',
+            # ENCR_AES_GCM_16
+            'aes-128-gcm-16': 'aes128gcm16',
+            'aes-192-gcm-16': 'aes192gcm16',
+            'aes-256-gcm-16': 'aes256gcm16',
+            # AUTH
+            'sha256': 'sha256',
+            'aes-xcbc': 'aesxcbc',
+            'aes-cmac': 'aescmac',
+            # PFS
+            'group22': 'modp1024s160',
+            'group23': 'modp2048s224',
+            'group24': 'modp2048s256',
+            'group25': 'ecp192',
+            'group26': 'ecp224',
+            'group27': 'ecp224bp',
+            'group28': 'ecp256bp',
+            'group29': 'ecp384bp',
+            'group30': 'ecp512bp',
+        }
+        self.DIALECT_MAP.update(dialect_map_update)
         self._strongswan_piddir = self._get_strongswan_piddir()
         self._rootwrap_cfg = self._get_rootwrap_config()
         LOG.debug("strongswan piddir is '%s'", (self._strongswan_piddir))
-        super(StrongSwanProcess, self).__init__(conf, process_id,
-                                                vpnservice, namespace)
+        super().__init__(conf, process_id, vpnservice, namespace)
 
     def _get_strongswan_piddir(self):
         return utils.execute(
@@ -113,7 +156,7 @@ class StrongSwanProcess(ipsec.BaseSwanProcess):
         ns_wrapper = self.get_ns_wrapper()
         return ip_wrapper.netns.execute(
             [ns_wrapper,
-             '--mount_paths=/etc:%s/etc,%s:%s/var/run' % (
+             '--mount_paths=/etc:{}/etc,{}:{}/var/run'.format(
                  self.config_dir, self._strongswan_piddir, self.config_dir),
              ('--rootwrap_config=%s' % self._rootwrap_cfg
                  if self._rootwrap_cfg else ''),

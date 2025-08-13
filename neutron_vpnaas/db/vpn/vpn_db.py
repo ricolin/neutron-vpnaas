@@ -228,9 +228,9 @@ class VPNPluginDb(vpnaas.VPNPluginBase,
             if "peer_cidrs" in ipsec_sitecon:
                 changed_peer_cidrs = True
                 old_peer_cidr_list = ipsec_site_conn_db['peer_cidrs']
-                old_peer_cidr_dict = dict(
-                    (peer_cidr['cidr'], peer_cidr)
-                    for peer_cidr in old_peer_cidr_list)
+                old_peer_cidr_dict = {
+                    peer_cidr['cidr']: peer_cidr
+                    for peer_cidr in old_peer_cidr_list}
                 new_peer_cidr_set = set(ipsec_sitecon["peer_cidrs"])
                 old_peer_cidr_set = set(old_peer_cidr_dict)
 
@@ -263,6 +263,7 @@ class VPNPluginDb(vpnaas.VPNPluginBase,
         return self._get_resource(
             context, vpn_models.IPsecSiteConnection, ipsec_site_conn_id)
 
+    @db_api.CONTEXT_READER
     def get_ipsec_site_connection(self, context,
                                   ipsec_site_conn_id, fields=None):
         ipsec_site_conn_db = self._get_ipsec_site_connection(
@@ -270,6 +271,7 @@ class VPNPluginDb(vpnaas.VPNPluginBase,
         return self._make_ipsec_site_connection_dict(
             ipsec_site_conn_db, fields)
 
+    @db_api.CONTEXT_READER
     def get_ipsec_site_connections(self, context, filters=None, fields=None):
         return model_query.get_collection(
             context, vpn_models.IPsecSiteConnection,
@@ -613,8 +615,8 @@ class VPNPluginDb(vpnaas.VPNPluginBase,
             query = query.join(
                 vpn_models.VPNEndpoint,
                 sa.and_(vpn_models.VPNEndpoint.endpoint_group_id ==
-                     vpn_models.VPNEndpointGroup.id,
-                     vpn_models.VPNEndpoint.endpoint == subnet_id))
+                        vpn_models.VPNEndpointGroup.id,
+                        vpn_models.VPNEndpoint.endpoint == subnet_id))
             group = query.first()
             if group:
                 raise vpn_exception.SubnetInUseByEndpointGroup(
@@ -712,7 +714,7 @@ class VPNPluginDb(vpnaas.VPNPluginBase,
         return cidrs
 
 
-class VPNPluginRpcDbMixin(object):
+class VPNPluginRpcDbMixin:
     def _build_local_subnet_cidr_map(self, context):
         """Build a dict of all local endpoint subnets, with list of CIDRs."""
         query = context.session.query(models_v2.Subnet.id,

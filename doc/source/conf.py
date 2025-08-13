@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2010 OpenStack Foundation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -247,6 +246,7 @@ openstackdocs_bug_tag = 'doc'
 _config_generator_config_files = [
     'vpn_agent.ini',
     'neutron_vpnaas.conf',
+    'ovn_vpn_agent.ini',
 ]
 
 

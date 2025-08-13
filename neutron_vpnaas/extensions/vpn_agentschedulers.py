@@ -16,8 +16,8 @@ import abc
 
 from neutron.api import extensions
 from neutron.api.v2 import resource
+from neutron.api import wsgi
 from neutron import policy
-from neutron import wsgi
 from neutron_lib.api import extensions as lib_extensions
 from neutron_lib.api import faults as base
 from neutron_lib import exceptions
@@ -63,7 +63,7 @@ class VPNRouterSchedulerController(wsgi.Controller):
         agent_id = kwargs['agent_id']
         router_id = body['router_id']
         result = plugin.add_router_to_vpn_agent(request.context, agent_id,
-                                               router_id)
+                                                router_id)
         notify(request.context, 'vpn_agent.router.add', router_id, agent_id)
         return result
 
@@ -74,7 +74,7 @@ class VPNRouterSchedulerController(wsgi.Controller):
                        {})
         agent_id = kwargs['agent_id']
         result = plugin.remove_router_from_vpn_agent(request.context, agent_id,
-                                                    id)
+                                                     id)
         notify(request.context, 'vpn_agent.router.remove', id, agent_id)
         return result
 
@@ -161,7 +161,7 @@ class RouterReschedulingFailed(exceptions.Conflict):
                "No eligible VPN agent found.")
 
 
-class VPNAgentSchedulerPluginBase(object, metaclass=abc.ABCMeta):
+class VPNAgentSchedulerPluginBase(metaclass=abc.ABCMeta):
     """REST API to operate the VPN agent scheduler.
 
     All methods must be in an admin context.

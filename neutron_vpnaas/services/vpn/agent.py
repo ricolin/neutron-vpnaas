@@ -30,11 +30,11 @@ vpn_agent_opts = [
         default=['neutron_vpnaas.services.vpn.device_drivers.'
                  'ipsec.OpenSwanDriver'],
         sample_default=['neutron_vpnaas.services.vpn.device_drivers.ipsec.'
-                       'OpenSwanDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'strongswan_ipsec.StrongSwanDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'libreswan_ipsec.LibreSwanDriver'],
+                        'OpenSwanDriver, '
+                        'neutron_vpnaas.services.vpn.device_drivers.'
+                        'strongswan_ipsec.StrongSwanDriver, '
+                        'neutron_vpnaas.services.vpn.device_drivers.'
+                        'libreswan_ipsec.LibreSwanDriver'],
         help=_("The vpn device drivers Neutron will use")),
 ]
 cfg.CONF.register_opts(vpn_agent_opts, 'vpnagent')
@@ -64,15 +64,20 @@ class VPNAgent(l3_extension.L3AgentExtension):
         if ri is not None:
             for device_driver in self.device_drivers:
                 device_driver.create_router(ri)
-                device_driver.sync(context, [ri.router])
+                device_driver.sync(context, [ri])
         else:
             LOG.debug("Router %s was concurrently deleted while "
                       "creating VPN for it", data['id'])
 
     def update_router(self, context, data):
         """Handles router update event"""
-        for device_driver in self.device_drivers:
-            device_driver.sync(context, [data])
+        ri = self.agent_api.get_router_info(data['id'])
+        if ri is not None:
+            for device_driver in self.device_drivers:
+                device_driver.sync(context, [ri])
+        else:
+            LOG.debug("Router %s was concurrently deleted while "
+                      "updating VPN for it", data['id'])
 
     def delete_router(self, context, data):
         """Handles router delete event"""
@@ -109,5 +114,4 @@ class L3WithVPNaaS(VPNAgent):
             self.conf = conf
         else:
             self.conf = cfg.CONF
-        super(L3WithVPNaaS, self).__init__(
-            host=self.conf.host, conf=self.conf)
+        super().__init__(host=self.conf.host, conf=self.conf)
